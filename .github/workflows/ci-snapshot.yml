@@ -1,0 +1,56 @@
+name: CI SNAPSHOT
+
+on:
+  workflow_dispatch:
+concurrency:
+  group: group-snapshot-for-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEVELOCITY_ACCESS_KEY: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+
+jobs:
+  build_snapshot:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - os: macos-latest
+          arch: arm64
+          runner: macos-latest
+          expander_leg: macos-latest--arm64
+    runs-on: ${{ matrix.runner }}
+    name: CI Build SNAPSHOT for ${{ github.ref_name }} [${{ matrix.expander_leg 
+      }}]
+    steps:
+
+    - uses: actions/checkout@v5
+      with:
+        show-progress: false
+
+    - name: Set up Gradle
+      if: matrix.runner != 'windows-11-arm'
+      uses: spring-io/spring-gradle-build-action@v2
+      with:
+        java-version: 25
+
+      # GraalPy (org.graalvm.polyglot:python) ships no windows-aarch64 native resources,
+      # so the Python scripting tests cannot start a polyglot context on an arm64 JVM.
+      # Windows 11 on ARM runs x64 binaries through emulation, so use an x64 JDK there
+      # and the complete test suite still runs on this runner.
+    - name: Set up JDK 25 (Windows arm64 runner, x64 JVM)
+      if: matrix.runner == 'windows-11-arm'
+      uses: actions/setup-java@v5
+      with:
+        distribution: temurin
+        java-version: 25
+        architecture: x64
+
+    - name: Set up Gradle (Windows arm64 runner)
+      if: matrix.runner == 'windows-11-arm'
+      uses: gradle/actions/setup-gradle@v5
+
+    - name: Build
+      run: ./gradlew check
+
+    timeout-minutes: 150
